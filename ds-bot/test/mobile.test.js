@@ -662,9 +662,10 @@ test('markdown-image serves workspace images and blocks traversal, unowned sessi
   const { chief } = await team(call)
   const workDir = mkdtempSync(join(tmpdir(), 'ds-bot-md-img-'))
   t.after(() => rmSync(workDir, { recursive: true, force: true }))
-  const outsideFile = join(tmpdir(), `ds-bot-outside-${Date.now()}.png`)
+  const outsideDir = mkdtempSync(join(tmpdir(), 'ds-bot-outside-image-'))
+  const outsideFile = join(outsideDir, 'secret.png')
   writeFileSync(outsideFile, Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
-  t.after(() => rmSync(outsideFile, { force: true }))
+  t.after(() => rmSync(outsideDir, { recursive: true, force: true }))
 
   mkdirSync(join(workDir, 'charts'), { recursive: true })
   const imgBytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0])
@@ -682,14 +683,18 @@ test('markdown-image serves workspace images and blocks traversal, unowned sessi
   assert.equal(fileUrl.ok, true)
   assert.equal(Buffer.from(fileUrl.value.bytes, 'base64').equals(imgBytes), true)
 
-  const escapeLink = join(workDir, 'charts', 'escape-link.png')
-  symlinkSync(outsideFile, escapeLink)
-  const symlinkEscape = await call('markdown-image', { sessionId, path: './charts/escape-link.png' })
+  // A directory junction exercises the same realpath escape on Windows without
+  // requiring the file-symlink privilege; POSIX keeps the file-symlink case.
+  const windows = process.platform === 'win32'
+  const escapeLink = join(workDir, 'charts', windows ? 'escape-link' : 'escape-link.png')
+  symlinkSync(windows ? outsideDir : outsideFile, escapeLink, windows ? 'junction' : 'file')
+  const symlinkEscape = await call('markdown-image', { sessionId, path: windows ? './charts/escape-link/secret.png' : './charts/escape-link.png' })
   assert.deepEqual([symlinkEscape.ok, symlinkEscape.error.code], [false, 'bot/forbidden'])
 
-  const brokenOutsideLink = join(workDir, 'charts', 'dangling-outside.png')
-  symlinkSync(join(tmpdir(), `missing-outside-${Date.now()}`, 'secret.png'), brokenOutsideLink)
-  const brokenTraversal = await call('markdown-image', { sessionId, path: './charts/dangling-outside.png' })
+  const missingDir = join(outsideDir, 'missing')
+  const brokenOutsideLink = join(workDir, 'charts', windows ? 'dangling-outside' : 'dangling-outside.png')
+  symlinkSync(windows ? missingDir : join(missingDir, 'secret.png'), brokenOutsideLink, windows ? 'junction' : 'file')
+  const brokenTraversal = await call('markdown-image', { sessionId, path: windows ? './charts/dangling-outside/secret.png' : './charts/dangling-outside.png' })
   assert.deepEqual([brokenTraversal.ok, brokenTraversal.error.code], [false, 'bot/not-found'])
 
   const traversal = await call('markdown-image', { sessionId, path: '../outside.png' })

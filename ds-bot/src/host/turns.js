@@ -1332,6 +1332,7 @@ export function install(rt) {
   // Agent, which `carrierKeyOf` hands back.
   ctx.on('subagent/start', function (info) {
     const id = carrierKeyOf(this)?.session?.id
+    if (rt.taskRunOfSession?.(info?.id) !== undefined) return
     const entry = id === undefined ? undefined : live.get(id)
     const work = rt.workOf?.(entry?.info)
     const self = id === undefined ? undefined : rt.selfOf(id)
@@ -1341,7 +1342,7 @@ export function install(rt) {
   // A settled run closes its sub-work: its closing text joins the results of
   // the work it hung under.
   ctx.on('subagent/end', (info) => {
-    if (typeof info?.id !== 'string') return
+    if (typeof info?.id !== 'string' || rt.taskRunOfSession?.(info.id) !== undefined) return
     rt.settleSubWork?.(typeof info.runId === 'string' ? info.runId : info.id, subEndText(info), info.id)
   })
   ctx.on('tools/result', (exec, result) => {

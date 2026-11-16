@@ -62,6 +62,8 @@ export function install(rt) {
   const modelsKey = () => `${rt.cachedCatalog().map(entry => `${entry.ref}${entry.needsKey ? '!' : ''}${entry.reasoning ? `:${JSON.stringify(entry.reasoning)}` : ''}`).join(',')}|${rt.cachedDefault() ?? ''}`
   const view = () => ({
     revision: state.revision,
+    taskRuns: rt.taskRunsView?.() ?? [],
+    taskRunsAvailable: rt.taskRunsAvailable?.() ?? false,
     workspaceId: state.workspaceId ?? null,
     // `mainBotId` is the first Main Bot, which the sidebar shows as its tile.
     mainBotId: state.mainBotIds[0] ?? null,
@@ -192,7 +194,7 @@ export function install(rt) {
   }
   // What a host that only reads the team may still answer.
   // Updates change the dsh profile, not the team, so a reading host may run them too.
-  const READS = new Set(['secret-store', 'secret-unlock', 'state', 'models', 'efforts', 'providers', 'provider-models', 'earlier', 'chat', 'run-stats', 'room-progress', 'group-rows', 'exchange', 'exchange-text', 'file-text', 'usage', 'schedules', 'memory-view', 'browser-wait', 'browser-result', 'diagnostics', 'diagnostics-log', 'diagnostics-clear', 'update-check', 'update-install', 'dsh-update-install', 'repo-stars', 'approval-answer', 'thinking', 'avatar-library', 'computer-system-status', 'computer-shot', 'local-agents', 'local-agent-models', 'browser-frame', 'hello', 'notices', 'avatar', 'room-chat', 'usage-summary', 'image', 'markdown-image', 'file-download', 'changes-check', 'changes-summary', 'changes-diff'])
+  const READS = new Set(['secret-store', 'secret-unlock', 'state', 'models', 'efforts', 'providers', 'provider-models', 'earlier', 'chat', 'run-stats', 'room-progress', 'group-rows', 'exchange', 'exchange-text', 'file-text', 'usage', 'schedules', 'memory-view', 'browser-wait', 'browser-result', 'diagnostics', 'diagnostics-log', 'diagnostics-clear', 'update-check', 'update-install', 'dsh-update-install', 'repo-stars', 'approval-answer', 'thinking', 'avatar-library', 'computer-system-status', 'computer-shot', 'local-agents', 'local-agent-models', 'browser-frame', 'hello', 'notices', 'avatar', 'room-chat', 'usage-summary', 'image', 'markdown-image', 'file-download', 'changes-check', 'changes-summary', 'changes-diff', 'task-run-read', 'task-run-log'])
 
   async function setPrefs(body) {
     if (body.theme !== undefined) {
@@ -572,6 +574,16 @@ export function install(rt) {
           await rt.save()
           return ok(view())
         }
+        case 'task-run-read':
+          return ok(await rt.taskRunRead(String(body.id ?? ''), { user: true }))
+        case 'task-run-log':
+          return ok(await rt.taskRunLog(String(body.id ?? ''), { user: true }, body.after))
+        case 'task-run-steer':
+          await rt.taskRunControl(String(body.id ?? ''), 'steer', body.text, { user: true })
+          return ok(view())
+        case 'task-run-cancel':
+          await rt.taskRunControl(String(body.id ?? ''), 'cancel', undefined, { user: true })
+          return ok(view())
         case 'stop-chat':
           return ok(await rt.stopChat(String(body.botId ?? '')))
         case 'dismiss-question':

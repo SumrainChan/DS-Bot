@@ -78,6 +78,7 @@ export const TEAM_TOOLS = [
   'read_group_chat', 'remember', 'forget', 'recall', 'read_browser',
   'list_capabilities', 'save_capability', 'delete_capability',
   'attach_capability', 'detach_capability', 'group_goal', 'group_task', 'list_connectors', 'request_connector',
+  'start_task', 'list_task_runs', 'read_task_run', 'steer_task', 'cancel_task',
 ]
 // Consecutive automatic admin wakes with no goal progress before the goal waits
 // for the user instead of waking the admin again.

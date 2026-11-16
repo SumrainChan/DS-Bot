@@ -18,6 +18,7 @@ import { MemberApprovals, MemberState, StopMemberWork, StopRoomWork, useMemberWo
 import { canSetGoal, goalView, hasGoalAdmin } from './goal.js'
 import { PermissionPicker, presetDanger, presetName } from './permission-picker.js'
 import { TaskBoard } from './task-board.js'
+import { TaskRuns } from './task-runs.js'
 import { BotConnectors } from './connectors.js'
 import { ComputerView } from './computer.js'
 import { t } from './i18n.js'
@@ -204,6 +205,7 @@ function GroupOverview({ room, roster, actions, usage, useWork, openSettings }) 
         key: member.id, member, entry: entries.find(item => item.id === member.id), room, roster, actions,
       })))),
     h('div', { key: 'tasks' }, h(TaskBoard, { room, roster, actions })),
+    h(TaskRuns, { key: 'task-runs', state: roster, room, act: actions.taskRunCall }),
     h('div', { key: 'goal' }, h('div', { className: 'bt-section-title' }, t('Goal')),
       h('div', { className: 'bt-kv' },
         room.goal
@@ -391,6 +393,7 @@ export function DetailsDrawer({ sessionId, startRenaming, startTab, hasStrip, ro
           modelOf(bot, roster) ? null : h('div', { className: 'bt-note' }, t('Pick a model and {name} can start.', { name: bot.name })),
         ),
         h(BotSessions, { key: 'sessions', bot, part, run, useSessions, actions, running: roster.partsRunning }),
+        h(TaskRuns, { key: 'task-runs', state: roster, bot, act: actions.taskRunCall }),
         h(PermissionRow, { key: 'permission', bot, roster, actions, run }),
         h(BotConnectors, { key: 'connectors', bot, roster, actions, run }),
         h('div', { key: 'folder', className: 'bt-drawer-model' },

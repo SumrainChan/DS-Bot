@@ -15,7 +15,7 @@ import { planRepair, repair, stalePins } from '../bin/ds-bot-doctor.mjs'
 
 const DOCTOR = join(dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'ds-bot-doctor.mjs')
 const RUNNING = '0.2.2-rc.2'
-const FAKE_PNPM = 'true'
+const FAKE_PNPM = process.platform === 'win32' ? fileURLToPath(new URL('./fixtures/fake-pnpm.cmd', import.meta.url)) : 'true'
 
 function homeWith(profiles) {
   const home = mkdtempSync(join(tmpdir(), 'ds-bot-doctor-'))

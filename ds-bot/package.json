@@ -55,6 +55,9 @@
     "@deepseek-ai/cordis": "*",
     "@deepseek-ai/dsh-llm": "*",
     "@deepseek-ai/dsh-scope": "*",
+    "@deepseek-ai/dsh-sandbox-policy": "*",
+    "@deepseek-ai/dsh-session": "*",
+    "@deepseek-ai/dsh-user-approval": "*",
     "@deepseek-ai/dsh-tools": "*",
     "@deepseek-ai/dsh-typert-protocol": "*",
     "@deepseek-ai/dsh-web": "*"

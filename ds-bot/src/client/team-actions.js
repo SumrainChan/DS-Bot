@@ -81,6 +81,7 @@ export function teamActions({ call, after, partFor, roster, ui, live, cards, hel
       return value
     },
     sideCall: (name, body) => after(call(name, body)),
+    taskRunCall: (name, body) => name === 'task-run-log' || name === 'task-run-read' ? call(name, body) : after(call(name, body)),
     askSide: (sessionId, chatId, text) => after(call('side-ask', { sessionId, chatId, text })),
     cancelSide: (chatId, entryId) => after(call('side-cancel', { chatId, entryId })),
     closeSideChat: (chatId) => {
