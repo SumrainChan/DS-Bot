@@ -57,6 +57,7 @@
     "@deepseek-ai/dsh-scope": "*",
     "@deepseek-ai/dsh-sandbox-policy": "*",
     "@deepseek-ai/dsh-session": "*",
+    "@deepseek-ai/dsh-skill-filesystem": "*",
     "@deepseek-ai/dsh-user-approval": "*",
     "@deepseek-ai/dsh-tools": "*",
     "@deepseek-ai/dsh-typert-protocol": "*",

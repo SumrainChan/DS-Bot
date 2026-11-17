@@ -64,7 +64,7 @@ class ScriptedAdapter extends LlmAdapter {
 // persistence are production services. Only the Web route transport, workspace
 // registry, title display and Controller facade are shims; they delegate all
 // Session creation, driving, model selection and reads to those real services.
-export async function taskRunsFixture(t, { subagents = {} } = {}) {
+export async function taskRunsFixture(t, { subagents = {}, prepare, config = {} } = {}) {
   const tempBase = await realpath(tmpdir())
   const root = await realpath(await mkdtemp(join(tempBase, 'ds-bot-task-runs-integration-')))
   const project = join(root, 'project'), home = join(root, 'data', 'bot')
@@ -104,6 +104,7 @@ export async function taskRunsFixture(t, { subagents = {} } = {}) {
   await mountAgentLoopTestHarness(ctx)
   await ctx.plugin(Subagents, { maxDepth: 3, maxActiveSubagents: 16, ...subagents }).await()
   await ctx.plugin(Spawn, { providerName: 'spawn' }).await()
+  const preparedConfig = await prepare?.({ ctx, root, project, home, ids, adapter }) ?? {}
   const ensureAgent = async sessionId => {
     const live = ctx.agents.get(sessionId)
     if (live) return live
@@ -151,7 +152,7 @@ export async function taskRunsFixture(t, { subagents = {} } = {}) {
     },
   })
   const startRuntime = async () => {
-    runtimeFiber = ctx.plugin({ name: `actual-ds-bot-task-run-integration-${randomUUID()}`, inject, apply(pluginCtx) { rt = createRuntime(pluginCtx, { home, taskRuns: true }) } })
+    runtimeFiber = ctx.plugin({ name: `actual-ds-bot-task-run-integration-${randomUUID()}`, inject, apply(pluginCtx) { rt = createRuntime(pluginCtx, { home, taskRuns: true, ...config, ...preparedConfig }) } })
     await runtimeFiber.await()
     await rt.load()
     await rt.reconcileTaskRuns()

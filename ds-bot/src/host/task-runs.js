@@ -104,6 +104,8 @@ export function install(rt) {
     model: record.actualModel?.model ?? record.model, ...((record.actualModel?.reasoningEffort ?? record.effort) ? { effort: record.actualModel?.reasoningEffort ?? record.effort } : {}),
     cwd: record.cwd, projectRoot: record.projectRoot, sandboxMode: record.sandboxMode,
     sessionId: record.sessionId, startedAt: record.startedAt, ...(record.endedAt ? { endedAt: record.endedAt } : {}),
+    ...(record.pstack === undefined ? {} : { pstack: structuredClone(record.pstack) }),
+    ...(record.inheritedTools === undefined ? {} : { inheritedTools: [...record.inheritedTools] }),
     ...(record.output !== undefined ? { output: record.output, outputLength: record.outputLength } : {}),
     ...(record.error ? { error: record.error.message, errorCode: record.error.code } : {}),
     ...(record.stopReason ? { stopReason: record.stopReason } : {}),
@@ -224,19 +226,23 @@ export function install(rt) {
     } finally { settling.delete(record.id) }
   }
   async function configureAgent(agent, record) {
+    await rt.preparePstackTask?.(agent, record)
     for (const tool of tools) agent.ctx.tools.register(tool)
+    const inherited = record.inheritedTools === undefined ? undefined : new Set(record.inheritedTools)
+    const outside = name => inherited !== undefined && !TASK_TOOLS.has(name) && !inherited.has(name)
     const teamNames = new Set(rt.teamTools.map(tool => tool.name).filter(name => !TASK_TOOLS.has(name)))
     const deny = new Set([...UNMANAGED, ...teamNames, 'ask_user_question'])
+    for (const tool of ctx.tools.schemas(agent)) if (outside(tool.name)) deny.add(tool.name)
     const visible = ctx.tools.schemas(agent).map(tool => tool.name).filter(name => deny.has(name))
     for (const name of visible) {
       try { agent.ctx.tools.restrict({ deny: [name] }) } catch { /* execution guard also covers scope-local tools */ }
     }
-    agent.ctx.tools.guard(exec => deny.has(exec.name) ? 'Task workers use only their task execution tree; team management, native delegation and goals are unavailable.' : undefined)
+    agent.ctx.tools.guard(exec => outside(exec.name) ? 'This tool was not admitted by the calling Agent when the task started.' : deny.has(exec.name) ? 'Task workers use only their task execution tree; team management, native delegation and goals are unavailable.' : undefined)
     agent.ctx.systemPrompt.section({ name: 'task:identity', order: 600,
       text: `You are task run ${record.id} (${record.label}). Complete the supplied brief. You are not the owning Bot or a Main Bot. Only the explicit brief, instructions and authorized project material are your task context. Use start_task for necessary subwork and read_task_run to inspect its result. Your final answer is returned by the runtime automatically; do not call native messaging tools. Nested task completion arrives through the runtime's native completion notice. Keep engineering choices and exit conditions in the instructions you were given. A task execution completing does not by itself prove a project passed its checks.` })
     agent.ctx.on('system-prompt/assemble', async (_assembly, _context, next) => {
       const value = await next()
-      const keep = section => !deny.has(section.name?.replace(/^tool:/, '')) && !['team:policy', 'team:identity'].includes(section.name)
+      const keep = section => !deny.has(section.name?.replace(/^tool:/, '')) && !(section.name?.startsWith('tool:') && outside(section.name.slice(5))) && !['team:policy', 'team:identity'].includes(section.name)
       return { ...value, sections: value.sections.filter(keep), contexts: value.contexts.filter(keep) }
     })
   }
@@ -296,6 +302,17 @@ export function install(rt) {
     await rt.workFolder(cwd)
     if (sandboxMode !== 'danger-full-access' && !within(cwd, projectRoot)) throw reject('The task directory is outside the calling Agent project root.', 'bot/task-permission')
     if (who.run !== undefined && who.run.projectRoot !== projectRoot) throw reject('A nested task cannot change its inherited project root.')
+    const pstack = await rt.pstackTaskBinding?.(who.agent)
+    let admission
+    let inheritedTools
+    try {
+      if (exec.toolSet === undefined) {
+        if (inherited === undefined) throw reject('The calling Agent has no model selection for tool admission.')
+        admission = await ctx.tools.resolve({ agent: who.agent, modelSelection: inherited, signal: exec.signal ?? new AbortController().signal })
+      }
+      const upper = who.run?.inheritedTools === undefined ? undefined : new Set(who.run.inheritedTools)
+      inheritedTools = ctx.tools.schemas(who.agent, exec.toolSet ?? admission).map(tool => tool.name).filter(name => upper === undefined || upper.has(name) || TASK_TOOLS.has(name))
+    } finally { admission?.dispose() }
     writable()
     exec.signal?.throwIfAborted()
     if (stoppingOwners.has(bot.id) || rt.botOf(bot.id) !== bot) throw reject('The task owner changed before admission.')
@@ -309,7 +326,8 @@ export function install(rt) {
     const record = { id: `run-${randomUUID()}`, ownerBotId: bot.id, callerSessionId: who.agent.id,
       ...(roomId ? { roomId } : {}), ...(who.run ? { parentRunId: who.run.id } : {}),
       hostSessionId: who.run?.hostSessionId ?? `task-host-${randomUUID()}`, sessionId: `task-${randomUUID()}`,
-      label, brief, instructions, provider, model, ...(effort ? { effort } : {}), cwd, projectRoot, sandboxMode,
+      label, brief, instructions, provider, model, ...(effort ? { effort } : {}), cwd, projectRoot, sandboxMode, inheritedTools,
+      ...(pstack === undefined ? {} : { pstack: structuredClone(pstack) }),
       approvalPolicy: serviceOf(ctx, 'approval')?.overrideOf?.(who.agent.session) ?? serviceOf(ctx, 'approval')?.config?.policy ?? 'ask',
       admission: 'pending', status: 'starting', startedAt: Date.now() }
     runs()[record.id] = record

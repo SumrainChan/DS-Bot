@@ -424,6 +424,7 @@ export function install(rt) {
     await rt.load()
     const bot = botOfSession(sessionId)
     if (!bot) return
+    if (rt.config?.pstack?.enabled === true) await rt.preparePstackBot(await rt.resolveAgent(sessionId))
     if ((bot.capabilities ?? []).length === 0 && !mounts.get(agents.get(sessionId)?.deref())?.size) return
     let agent
     try {

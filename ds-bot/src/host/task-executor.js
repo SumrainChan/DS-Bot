@@ -65,6 +65,15 @@ export function createTaskExecutor(ctx, { configureAgent, onResult, onChange } =
     if (host !== undefined && host.projectRoot !== config.projectRoot) throw new Error('A task host cannot change its project root')
     if (host === undefined) {
       if (sessions.has(config.hostSessionId)) throw new Error('A task host cannot use a worker Session')
+      const presets = serviceOf(ctx, 'agentPresets')
+      let caller, presetId
+      if (presets !== undefined) {
+        if (typeof presets.composeFrom !== 'function' || typeof presets.composedPreset !== 'function') throw new Error('Task execution needs the public Agent preset composition API')
+        caller = typeof config.callerSessionId === 'string' ? agents().get(SessionId(config.callerSessionId)) : undefined
+        if (caller === undefined) throw new Error('Task execution needs its exact live calling Agent to inherit a preset')
+        presetId = presets.composedPreset(caller.ctx)
+        if (typeof presetId !== 'string') throw new Error('The calling Agent has no retained preset composition for task execution')
+      }
       host = { projectRoot: config.projectRoot, controller: new AbortController() }
       hosts.set(config.hostSessionId, host)
       host.pending = agents().create({
@@ -72,7 +81,14 @@ export function createTaskExecutor(ctx, { configureAgent, onResult, onChange } =
         meta: { cwd: config.projectRoot },
         agentOptions: { provider: config.provider, model: config.model },
         signal: host.controller.signal,
-        setup(agentCtx) {
+        setup(agentCtx, agent) {
+          setSandboxMode(agent.session, config.sandboxMode)
+          if (config.approvalPolicy !== undefined) setApprovalPolicy(agent.session, config.approvalPolicy)
+          if (presets !== undefined) {
+            if (agents().get(caller.id) !== caller || presets.composedPreset(caller.ctx) !== presetId) throw new Error('The calling Agent or its preset changed before task host composition')
+            if (presets.composeFrom(agentCtx, caller.ctx) !== presetId) throw new Error('Task host could not inherit the calling Agent preset')
+          }
+          // The host owns a retained preset revision independently of the calling Bot part.
           // The host is an execution owner, never another reasoning role or automatic driver.
           agentCtx.on('agent/pre-step', ({ agent }, next) => agent.id === config.hostSessionId ? { kind: 'reject' } : next())
           agentCtx.tools.guard(exec => exec.agent?.id === config.hostSessionId ? 'Task execution hosts do not execute tools' : undefined)
