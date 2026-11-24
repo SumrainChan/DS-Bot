@@ -17,6 +17,10 @@ import { turnFailure } from './turns.js'
 
 const ACTIVE = new Set(['starting', 'running'])
 const MODES = ['read-only', 'workspace-write', 'danger-full-access']
+// Original poteto-mode requires a read-only delegate to lose MCP tools: a filesystem
+// sandbox alone cannot undo a remote MCP side effect. Native DSH mounts every MCP
+// server as mcp__<id>__*, so a read-only task's admitted tool set drops that prefix.
+const MCP_TOOL_PREFIX = 'mcp__'
 const TASK_TOOLS = new Set(['start_task', 'list_task_runs', 'read_task_run', 'steer_task', 'cancel_task'])
 const UNMANAGED = new Set(['subagent', 'subagent_fork', 'subagent_codex', 'subagent_claude_code', 'send_message', 'interrupt_agent', 'list_agents', 'workflow', 'ralph', 'spawn_teammate', 'wait_agent', 'team_task_create', 'team_task_get', 'team_task_list', 'team_task_update', 'create_goal', 'update_goal', 'get_goal', 'schedule_create', 'schedule_edit', 'schedule_delete'])
 const toolOutput = { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: String(value) }] }
@@ -311,7 +315,8 @@ export function install(rt) {
         admission = await ctx.tools.resolve({ agent: who.agent, modelSelection: inherited, signal: exec.signal ?? new AbortController().signal })
       }
       const upper = who.run?.inheritedTools === undefined ? undefined : new Set(who.run.inheritedTools)
-      inheritedTools = ctx.tools.schemas(who.agent, exec.toolSet ?? admission).map(tool => tool.name).filter(name => upper === undefined || upper.has(name) || TASK_TOOLS.has(name))
+      const readOnly = sandboxMode === 'read-only'
+      inheritedTools = ctx.tools.schemas(who.agent, exec.toolSet ?? admission).map(tool => tool.name).filter(name => (upper === undefined || upper.has(name) || TASK_TOOLS.has(name)) && !(readOnly && name.startsWith(MCP_TOOL_PREFIX)))
     } finally { admission?.dispose() }
     writable()
     exec.signal?.throwIfAborted()

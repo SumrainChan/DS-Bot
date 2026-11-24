@@ -138,6 +138,37 @@ export function createTaskExecutor(ctx, { configureAgent, onResult, onChange } =
     } catch (error) {
       warn(entry, error)
     }
+    release(entry)
+    await reclaim(entry)
+  }
+
+  // A terminal task keeps its durable record and result, not its live execution
+  // objects. Without this the long-lived runtime accumulates one host Agent, one
+  // worker entry and one retained preset revision per task for the whole process.
+  async function reclaim(entry) {
+    if (entry.reclaimed === true) return
+    entry.reclaimed = true
+    runs.delete(entry.record.id)
+    if (sessions.get(entry.config.sessionId) === entry) sessions.delete(entry.config.sessionId)
+    if (entry.config.parentRunId !== undefined) return
+    // task-runs allocates one throwaway host per top-level run with this prefix.
+    // A caller may also supply its own stable host across runs, as the direct
+    // executor tests do; that host stays until its owner disposes it.
+    if (!entry.config.hostSessionId.startsWith('task-host-')) return
+    const hostId = entry.config.hostSessionId
+    if ([...runs.values()].some(other => other.config.hostSessionId === hostId)) return
+    const host = hosts.get(hostId)
+    if (host === undefined) return
+    hosts.delete(hostId)
+    const handle = host.handle
+    if (handle === undefined) return
+    try {
+      const delegation = serviceOf(ctx, 'subagents')
+      if (delegation !== undefined) await delegation.drainDescendants([handle.agent])
+      await handle.dispose()
+    } catch (error) {
+      warn(entry, error)
+    }
   }
 
   async function launch(entry, parentRecord) {
@@ -186,7 +217,7 @@ export function createTaskExecutor(ctx, { configureAgent, onResult, onChange } =
     if (sessions.has(record.sessionId) || hosts.has(record.sessionId) || record.sessionId === record.hostSessionId) {
       return Promise.reject(new Error('A task needs an unused worker Session'))
     }
-    const entry = { record, config: Object.freeze({ ...record }), controller: new AbortController(), notifications: Promise.resolve(), settled: false, cancelRequested: false }
+    const entry = { record, config: Object.freeze({ ...record }), controller: new AbortController(), notifications: Promise.resolve(), settled: false, reclaimed: false, cancelRequested: false }
     runs.set(record.id, entry)
     sessions.set(record.sessionId, entry)
     entry.pending = launch(entry, parentRecord)

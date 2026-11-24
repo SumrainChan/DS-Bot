@@ -419,3 +419,21 @@ test('an identical request retry reuses its retained receipt even after the orig
   assert.equal(r.adapter.calls.filter(call => call.model === 'A').length, 1)
   await assert.rejects(access(directory), error => error.code === 'ENOENT')
 })
+
+test('a terminal task releases its live host and worker Agents while keeping the durable result', options, async t => {
+  const r = await taskRunsFixture(t), held = r.adapter.hold('A')
+  const receipt = await start(r)
+  await r.adapter.started('A')
+  const hostId = r.rt.state.taskRuns[receipt.id].hostSessionId
+  assert.ok(r.ctx.agents.get(receipt.sessionId), 'worker Agent is live while the task runs')
+  assert.ok(r.ctx.agents.get(hostId), 'execution host is live while the task runs')
+  held.open()
+  const terminal = await r.settled(receipt.id)
+  assert.equal(terminal.status, 'completed')
+  await until(() => r.ctx.agents.get(receipt.sessionId) === undefined, 'worker Agent released after terminal')
+  await until(() => r.ctx.agents.get(hostId) === undefined, 'execution host released after terminal')
+  const read = await r.rt.taskRunRead(receipt.id, { user: true })
+  assert.equal(read.result.output, 'INTEGRATION_OUTPUT:A')
+  assert.equal(read.status, 'completed')
+})
+

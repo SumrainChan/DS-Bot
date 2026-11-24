@@ -45,7 +45,8 @@ Shared model-settings module interface: `readPstackModelSettings({ sourceRoot, s
 ## Harness mapping
 
 - Task/Agent/spawn_agent maps to fresh `start_task`; model/effort/cwd use the corresponding task fields. Its return is admission, not completion.
-- readonly/readOnly maps to `permission: 'read-only'`; it is never discarded as unsupported metadata. Filesystem mode alone is not advertised as a blanket guarantee against external MCP side effects.
+- readonly/readOnly maps to `permission: 'read-only'`; it is never discarded as unsupported metadata. A read-only task's admitted tool set also drops every `mcp__*` tool, matching the original rule that a read-only delegate loses MCP; workspace-write keeps the caller's MCP tools. Filesystem mode alone is not advertised as a blanket guarantee against external MCP side effects.
+- Terminal tasks reclaim their live execution objects. A host allocated per top-level run is disposed after its result is delivered, and worker entries leave the executor maps; the durable record and result stay readable. A caller that supplies one stable `hostSessionId` across runs retains that host until its owner disposes it.
 - subagent_type is role intent. For unregistered poteto-agent, preserve the source's prompt prefix requiring the full absolute poteto-mode Skill and Principles. Routed generalPurpose roles keep their own prompts.
 - Native completion notices and `read_task_run` expose results. `steer_task` targets only active work; `cancel_task` stops the authorized subtree. Steering is not terminal resume or context fork.
 - Bot questions use its existing ask_user path; workers report missing operator information to their owner. No native ask_user_question or messaging guard is removed.

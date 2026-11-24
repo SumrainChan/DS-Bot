@@ -203,3 +203,19 @@ test('request_id retry returns the original names without resolving a new bounda
   assert.equal((await r.settled(original.id)).status, 'completed')
   assert.deepEqual((await r.savedState()).taskRuns[original.id].inheritedTools, originalNames)
 })
+
+test('read-only tasks drop MCP tools while workspace-write keeps them', options, async t => {
+  const counts = new Map()
+  const r = await taskRunsFixture(t, { prepare: async ({ ctx }) => {
+    counter(ctx, counts, 'mcp__echo__ping')
+    counter(ctx, counts, 'policy_local')
+  } })
+  const readOnly = await start(r, r.chief, { ...startArgs('A'), permission: 'read-only' })
+  const readOnlyNames = await assertBinding(r, readOnly)
+  assert.ok(readOnlyNames.includes('policy_local'))
+  assert.ok(!readOnlyNames.includes('mcp__echo__ping'), 'a read-only task must not inherit MCP tools')
+  const write = await start(r, r.chief, { ...startArgs('A') })
+  const writeNames = await assertBinding(r, write)
+  assert.ok(writeNames.includes('mcp__echo__ping'), 'workspace-write keeps the caller MCP tools')
+})
+
